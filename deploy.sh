@@ -8,7 +8,7 @@ set -euo pipefail
 PROJECT_ID="iexcel-agents"
 REGION="us-central1"
 SERVICE_NAME="ixl-gmail-dot-generator"
-GCLOUD_ACCOUNT="ads-automation@iexcel-agents.iam.gserviceaccount.com"
+GCLOUD_ACCOUNT="${GCLOUD_ACCOUNT:-ads-automation@iexcel-agents.iam.gserviceaccount.com}"
 RUNTIME_SA="gmail-dot-gen-sheets@iexcel-agents.iam.gserviceaccount.com"
 IMAGE_URI="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
 
