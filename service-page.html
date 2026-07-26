@@ -94,27 +94,9 @@
   }
   </script>
 
-  <!-- Google Analytics 4 -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-83XMET894X"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-83XMET894X');
-  </script>
-
-  <!-- Microsoft Clarity Analytics -->
-  <script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "w3mew1om3b");
-  </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Poppins:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
   <style>
     :root {
       --blue-600: #2563eb;
@@ -939,25 +921,120 @@
       }
     }
   </style>
+
+  <!-- ===== iexcel.co theme: header, footer, brand tokens ===== -->
+  <style id="iex-theme">
+    /* Re-point the accent tokens from blue -> iExcel brand teal so every
+       existing component (buttons, links, borders, gradients) inherits the
+       new brand color without changing any markup or JS. */
+    :root {
+      --blue-600: #0097a7;   /* iExcel brand teal */
+      --blue-700: #00838f;
+      --indigo-600: #007c8a; /* gradient partner for the primary button */
+    }
+
+    /* Adopt Poppins (the new site's brand font) for body/UI copy.
+       Cormorant Garamond display headings are intentionally kept. */
+    html, body { font-family: "Poppins", "Inter", sans-serif; }
+
+    /* ---------- Header (matches iexcel.co) ---------- */
+    .iex-header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255, 255, 255, 0.88);
+      -webkit-backdrop-filter: saturate(180%) blur(10px);
+      backdrop-filter: saturate(180%) blur(10px);
+      border-bottom: 1px solid #e6e6e6;
+      font-family: "Poppins", sans-serif;
+    }
+    .iex-header-inner {
+      max-width: 1320px; margin: 0 auto; padding: 0 24px;
+      height: 69px; display: flex; align-items: center;
+      justify-content: space-between; gap: 24px;
+    }
+    .iex-logo { display: inline-flex; align-items: center; }
+    .iex-logo img { height: 30px; width: auto; display: block; }
+    .iex-nav { display: flex; align-items: center; gap: 30px; }
+    .iex-nav a {
+      color: #3d3d3d; font-weight: 500; font-size: 15px;
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: color .15s ease;
+    }
+    .iex-nav a:hover { color: #0097a7; }
+    .iex-nav svg { width: 12px; height: 12px; opacity: .7; }
+    .iex-cta {
+      background: #0097a7; color: #fff; font-weight: 600; font-size: 14px;
+      padding: 10px 18px; border-radius: 9999px; white-space: nowrap;
+      transition: background .15s ease, transform .15s ease;
+    }
+    .iex-cta:hover { background: #00838f; transform: translateY(-1px); }
+    .iex-menu-btn { display: none; }
+    @media (max-width: 900px) {
+      .iex-nav { display: none; }
+    }
+
+    /* ---------- Footer (matches iexcel.co) ---------- */
+    .iex-footer {
+      background: #1e1e1e; color: rgba(255,255,255,0.6);
+      padding: 40px 0 28px; font-family: "Poppins", sans-serif;
+    }
+    .iex-footer-grid {
+      max-width: 1320px; margin: 0 auto; padding: 0 24px;
+      display: grid; gap: 40px; grid-template-columns: 2fr 1fr 1fr 1fr;
+    }
+    .iex-footer-logo { height: 30px; width: auto; filter: brightness(0) invert(1); }
+    .iex-footer-brand p {
+      font-size: 14px; line-height: 1.5; margin: 16px 0 0;
+      max-width: 280px; color: rgba(255,255,255,0.6);
+    }
+    .iex-mono-label {
+      font-family: "JetBrains Mono", monospace; font-size: 11px;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+    .iex-footer-col ul {
+      list-style: none; padding: 0; margin: 14px 0 0;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .iex-footer-col a {
+      font-size: 14px; color: rgba(255,255,255,0.6); transition: color .15s ease;
+    }
+    .iex-footer-col a:hover { color: #fff; }
+    .iex-footer-bottom {
+      max-width: 1320px; margin: 28px auto 0; padding: 20px 24px 0;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; flex-wrap: wrap; font-size: 12px; color: rgba(255,255,255,0.4);
+    }
+    .iex-footer-legal {
+      display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    }
+    .iex-footer-legal a { transition: color .15s ease; }
+    .iex-footer-legal a:hover { color: #fff; }
+    @media (max-width: 720px) { .iex-footer-grid { grid-template-columns: 1fr 1fr; row-gap: 28px; } }
+    @media (max-width: 480px) { .iex-footer-grid { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M4569GJZ"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
-  <header class="header">
-    <div class="container header-row">
-      <a href="#top" class="brand" aria-label="Gmail Dots Home">
-        <img src="https://iexcel.co/wp-content/uploads/2023/01/iexcel_logo.png" alt="iExcel" />
-        <span>Gmail Generator</span>
+  <!-- ===== iexcel.co header (adopted) ===== -->
+  <header class="iex-header">
+    <div class="iex-header-inner">
+      <a href="https://iexcel.co" class="iex-logo" aria-label="iExcel — go to homepage">
+        <img src="https://iexcel.co/iexcel_logo.png" alt="iExcel" width="120" height="32" />
       </a>
-      <nav class="header-nav" aria-label="Primary">
-        <a href="#generator">Generator</a>
-        <a href="#use-cases">Use Cases</a>
-        <a href="#how-it-works">How It Works</a>
-        <a href="#faq">FAQ</a>
+      <nav class="iex-nav" aria-label="Primary">
+        <a href="https://iexcel.co/the-iexcel-team">Team</a>
+        <a href="https://iexcel.co/what-we-do">What We Do</a>
+        <a href="https://iexcel.co/what-weve-done">What We&rsquo;ve Done
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </a>
+        <a href="https://iexcel.co/case-studies">Case Studies</a>
+        <a href="https://iexcel.co/tools">Tools</a>
       </nav>
-      <a class="header-cta" href="#generator">Generate Now</a>
+      <a class="iex-cta" href="https://iexcel.co/chat">Book a consultation &rarr;</a>
     </div>
   </header>
 
@@ -1199,49 +1276,52 @@
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-grid">
-        <section class="footer-brand">
-          <img src="https://iexcel.co/wp-content/uploads/2023/01/iexcel_logo.png" alt="iExcel" />
-          <p>Digital Marketing, Focused On Growth. Practical Gmail generator tools for email marketing testing.</p>
-          <a href="https://iexcel.co/chat/" target="_blank" rel="noreferrer" style="color: var(--blue-600); font-size: 13px; font-weight: 500;">Contact iExcel</a>
-        </section>
-
-        <section class="footer-col">
-          <h4>Product</h4>
-          <a href="#generator">Generator</a>
-          <a href="#use-cases">Use Cases</a>
-          <a href="#how-it-works">How It Works</a>
-          <a href="#faq">FAQ</a>
-        </section>
-
-        <section class="footer-col">
-          <h4>Resources</h4>
-          <a href="https://iexcel.co" target="_blank" rel="noreferrer">iExcel</a>
-          <a href="https://iexcel.co/chat/" target="_blank" rel="noreferrer">Contact</a>
-          <a href="https://iexcel.co/#about" target="_blank" rel="noreferrer">About</a>
-          <a href="https://iexcel.co/blog" target="_blank" rel="noreferrer">Blog</a>
-        </section>
-
-        <section class="footer-col">
-          <h4>Social</h4>
-          <a href="https://twitter.com/iexcelco" target="_blank" rel="noreferrer">Twitter / X</a>
-          <a href="https://www.linkedin.com/company/iexcel/" target="_blank" rel="noreferrer">LinkedIn</a>
-          <a href="https://www.facebook.com/iExcelCo/" target="_blank" rel="noreferrer">Facebook</a>
-          <a href="https://www.instagram.com/iExcelCo/" target="_blank" rel="noreferrer">Instagram</a>
-          <div class="social-row" aria-label="Social links">
-            <a href="https://twitter.com/iexcelco" target="_blank" rel="noreferrer" aria-label="Twitter">X</a>
-            <a href="https://www.linkedin.com/company/iexcel/" target="_blank" rel="noreferrer" aria-label="LinkedIn">in</a>
-            <a href="https://www.facebook.com/iExcelCo/" target="_blank" rel="noreferrer" aria-label="Facebook">f</a>
-            <a href="https://www.instagram.com/iExcelCo/" target="_blank" rel="noreferrer" aria-label="Instagram">ig</a>
-          </div>
-        </section>
+  <!-- ===== iexcel.co footer (adopted) ===== -->
+  <footer class="iex-footer">
+    <div class="iex-footer-grid">
+      <div class="iex-footer-brand">
+        <a href="https://iexcel.co" aria-label="iExcel — go to homepage">
+          <img class="iex-footer-logo" src="https://iexcel.co/iexcel_logo.png" alt="iExcel" width="120" height="32" />
+        </a>
+        <p>Boutique growth marketing + demand gen. Special-ops precision for formidable digital challenges.</p>
       </div>
 
-      <div class="footer-bottom">
-        <span>Copyright (c) 2026 iExcel. All rights reserved.</span>
+      <div class="iex-footer-col">
+        <div class="iex-mono-label">Services</div>
+        <ul>
+          <li><a href="https://iexcel.co/what-we-do">What We Do</a></li>
+          <li><a href="https://iexcel.co/services">Services</a></li>
+          <li><a href="https://iexcel.co/platform">Platform</a></li>
+          <li><a href="https://iexcel.co/industry">Industry</a></li>
+        </ul>
       </div>
+
+      <div class="iex-footer-col">
+        <div class="iex-mono-label">Company</div>
+        <ul>
+          <li><a href="https://iexcel.co/the-iexcel-team">Team</a></li>
+          <li><a href="https://iexcel.co/press">Press</a></li>
+        </ul>
+      </div>
+
+      <div class="iex-footer-col">
+        <div class="iex-mono-label">Resources</div>
+        <ul>
+          <li><a href="https://iexcel.co/case-studies">Case Studies</a></li>
+          <li><a href="https://hubs.ly/Q04mW0DM0" target="_blank" rel="noopener noreferrer">Capabilities Deck</a></li>
+          <li><a href="https://iexcel.co/#faq">FAQ</a></li>
+          <li><a href="https://iexcel.co/chat">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="iex-footer-bottom">
+      <div class="iex-footer-legal">
+        <span>&copy; 2026 iExcel. Made by a senior team.</span>
+        <a href="https://iexcel.co/privacy-policy">Privacy Policy</a>
+        <a href="https://iexcel.co/#do-not-sell">Do Not Sell or Share My Personal Information</a>
+      </div>
+      <span class="iex-mono-label">CONFIDENCE &middot; HIGH</span>
     </div>
   </footer>
 
