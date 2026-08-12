@@ -54,7 +54,7 @@ function renderEmailHtml({ baseEmail, mode, variations }) {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
                   <tr>
                     <td align="left" valign="middle">
-                      <img src="https://iexcel.co/wp-content/uploads/2023/01/iexcel_logo.png" alt="iExcel" style="height:36px;width:auto;" />
+                      <img src="https://iexcel.co/iexcel_logo.png" alt="iExcel" style="height:36px;width:auto;" />
                     </td>
                   </tr>
                   <tr>
