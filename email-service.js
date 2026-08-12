@@ -3,6 +3,7 @@ import { AgentMailClient } from 'agentmail';
 const DEFAULT_INBOX_ID = 'iexcelagent@agentmail.to';
 
 let client;
+let clientKey;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -13,15 +14,20 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function getClient() {
-  if (client) return client;
-
-  const apiKey = process.env.AGENTMAIL_API_KEY;
+// The API key can be supplied explicitly (Cloudflare Workers pass it from
+// `env`, since Workers don't populate `process.env` from bindings) or read
+// from `process.env` (Cloud Run). We cache the client keyed by the resolved
+// key so a different key rebuilds it.
+function getClient(explicitApiKey) {
+  const apiKey = explicitApiKey || process.env.AGENTMAIL_API_KEY;
   if (!apiKey) {
     throw new Error('AGENTMAIL_API_KEY is not configured');
   }
 
+  if (client && clientKey === apiKey) return client;
+
   client = new AgentMailClient({ apiKey });
+  clientKey = apiKey;
   return client;
 }
 
@@ -54,7 +60,7 @@ function renderEmailHtml({ baseEmail, mode, variations }) {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
                   <tr>
                     <td align="left" valign="middle">
-                      <img src="https://iexcel.co/wp-content/uploads/2023/01/iexcel_logo.png" alt="iExcel" style="height:36px;width:auto;" />
+                      <img src="https://iexcel.co/iexcel_logo.png" alt="iExcel" style="height:36px;width:auto;" />
                     </td>
                   </tr>
                   <tr>
@@ -137,7 +143,7 @@ function renderEmailText({ baseEmail, mode, variations }) {
   return lines.join('\n');
 }
 
-export async function sendResultsEmail({ to, baseEmail, mode, variations }) {
+export async function sendResultsEmail({ to, baseEmail, mode, variations, apiKey, inboxId: inboxIdOverride }) {
   if (!to) {
     throw new Error('Recipient email is required');
   }
@@ -146,12 +152,15 @@ export async function sendResultsEmail({ to, baseEmail, mode, variations }) {
   // actionable logs when the prod 500 fires (template error vs API error vs
   // missing env). Caller (server.js) catches and returns 200 with
   // emailQueued:false so the user never sees a 500.
+  //
+  // `apiKey`/`inboxId` may be passed explicitly (Cloudflare Workers, which
+  // read them from `env`); otherwise we fall back to process.env (Cloud Run).
   let inboxId;
   let html;
   let text;
   try {
-    const mailClient = getClient();
-    inboxId = process.env.AGENTMAIL_INBOX_ID || DEFAULT_INBOX_ID;
+    const mailClient = getClient(apiKey);
+    inboxId = inboxIdOverride || process.env.AGENTMAIL_INBOX_ID || DEFAULT_INBOX_ID;
 
     const payload = { baseEmail, mode, variations };
     html = renderEmailHtml(payload);
@@ -169,7 +178,7 @@ export async function sendResultsEmail({ to, baseEmail, mode, variations }) {
   }
 
   try {
-    await getClient().inboxes.messages.send(inboxId, {
+    await getClient(apiKey).inboxes.messages.send(inboxId, {
       to,
       subject: `Your Gmail Dot Variations for ${baseEmail}`,
       text,
