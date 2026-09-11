@@ -31,7 +31,7 @@ function isValidWorkspaceDomain(domain) {
 }
 
 export function normalizePlusTags(input) {
-  let raw = [];
+  let raw;
   if (Array.isArray(input)) {
     raw = input;
   } else if (typeof input === 'string') {
@@ -300,4 +300,79 @@ export function generateGmailDotVariants(value, options = {}) {
   }
 
   throw new TypeError(`Unsupported mode "${mode}". Use "wordSplit" or "all".`);
+}
+
+function dedupe(values) {
+  return [...new Set(values)];
+}
+
+/**
+ * Everything one run of the tool produces for an address: the recommended
+ * word-split variant (`primary`) plus `extras` (all-mode dot variants and
+ * +alias variants). The page renders this and the server persists it, so
+ * both always agree on what a run generated.
+ *
+ * Returns null when the address does not parse.
+ *
+ * @param {string} address
+ * @param {object} [options]
+ * @param {'wordSplit'|'all'} [options.mode]
+ * @param {string} [options.workspaceDomain] - custom Google Workspace domain, '' for Gmail
+ * @param {string|string[]} [options.plusTags] - user tags; DEFAULT_PLUS_TAGS when empty
+ */
+export function buildVariantSet(address, options = {}) {
+  const mode = options.mode === 'all' ? 'all' : 'wordSplit';
+  const workspaceDomain = options.workspaceDomain || '';
+  const parsed = parseGmailAddress(address, workspaceDomain ? { workspaceDomain } : undefined);
+  if (!parsed) return null;
+
+  const noDot = `${parsed.baseLocal}${parsed.plusTag}@${parsed.domain}`.toLowerCase();
+  const generatorOptions = workspaceDomain ? { workspaceDomain } : {};
+  const wordSplit = (generateGmailDotVariants(address, { ...generatorOptions, mode: 'wordSplit' })[0] || noDot).toLowerCase();
+
+  const userTags = normalizePlusTags(options.plusTags);
+  const plusTagsUsed = userTags.length ? userTags : [...DEFAULT_PLUS_TAGS];
+
+  // +alias variants on the dot-stripped base local AND on the word-split
+  // local (e.g. john.smith+signup@gmail.com) so users see both shapes.
+  const wordSplitLocal = wordSplit.split('@')[0];
+  const plusBase = generatePlusTagVariants(parsed, { tags: plusTagsUsed });
+  const plusSplit = wordSplitLocal !== parsed.baseLocal
+    ? generatePlusTagVariants(parsed, { tags: plusTagsUsed, localOverride: wordSplitLocal })
+    : [];
+
+  let extras = [];
+  let modeWarning = '';
+
+  if (mode === 'all') {
+    try {
+      const all = generateGmailDotVariants(address, { ...generatorOptions, mode: 'all' });
+      extras = dedupe(all)
+        .map((variant) => variant.toLowerCase())
+        .filter((variant) => variant !== noDot && variant !== wordSplit);
+    } catch (error) {
+      modeWarning = error instanceof RangeError
+        ? 'All mode exceeds safe permutation limits for this local-part length. Showing word split only.'
+        : 'Unable to generate all-mode variants. Showing word split only.';
+    }
+  }
+
+  // +alias variants are unique by construction (different "+tag" segment);
+  // dedupe against primary/noDot defensively.
+  const plusVariants = dedupe([...plusBase, ...plusSplit])
+    .filter((v) => v !== noDot && v !== wordSplit);
+  extras = dedupe([...extras, ...plusVariants]);
+
+  return {
+    mode,
+    parsed,
+    noDot,
+    primary: wordSplit,
+    extras,
+    plusVariants,
+    plusTagsUsed,
+    workspaceDomain,
+    isWorkspace: !!workspaceDomain,
+    modeWarning
+  };
 }

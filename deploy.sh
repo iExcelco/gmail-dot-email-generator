@@ -43,6 +43,12 @@ CLOUD_RUN_URL="https://ixl-gmail-dot-generator-454575866716.us-central1.run.app"
 SHEETS_SPREADSHEET_ID="12y0qOlzsx5U8sV5jV7sgJW88BOQli9ENC6w1nLiTKLA"
 SHEETS_TAB="gmail-email-generator"
 
+# Secret Manager (project iexcel-agents). RUNTIME_SA needs
+# roles/secretmanager.secretAccessor on each of these.
+DATABASE_SECRET_NAME="DATABASE_URL"         # shared Neon Postgres; this app owns schema `gdg`
+AGENTMAIL_SECRET_NAME="AGENTMAIL_API_KEY"   # results email
+SECRETS="DATABASE_URL=${DATABASE_SECRET_NAME}:latest,AGENTMAIL_API_KEY=${AGENTMAIL_SECRET_NAME}:latest"
+
 # ---- Commands ---------------------------------------------------------------
 
 show_help() {
@@ -61,7 +67,8 @@ time — so the vanity service reuses the image built by 'production' and only
 overrides env vars. A release is NOT done until BOTH are deployed: use 'all'.
 
 Commands:
-  local       Run dev server at http://localhost:8080
+  local       Run dev server at http://localhost:8080 (no DB, no email)
+              For production secrets + DB: ./scripts/dev-with-secrets.sh
   production  Build image and deploy the PREFIXED service
               (canonical: ${PUBLIC_HOST}${CANONICAL_PATH})
   vanity      Deploy the already-built image to the VANITY service
@@ -84,19 +91,23 @@ deploy_production() {
     echo "==> Deploying to ${PUBLIC_HOST}${CANONICAL_PATH}"
     echo "    project=${PROJECT_ID}  service=${SERVICE_NAME}  account=${GCLOUD_ACCOUNT}"
 
-    echo "==> [1/4] npm ci"
+    echo "==> [1/5] npm ci"
     npm ci
 
-    echo "==> [2/4] npm test"
+    echo "==> [2/5] npm test"
     npm test
 
-    echo "==> [3/4] Cloud Build (image: ${IMAGE_URI})"
+    echo "==> [3/5] Cloud Build (image: ${IMAGE_URI})"
     gcloud builds submit \
         --tag "${IMAGE_URI}" \
         --project "${PROJECT_ID}" \
         --account "${GCLOUD_ACCOUNT}"
 
-    echo "==> [4/4] Cloud Run deploy"
+    echo "==> [4/5] Database migrations (idempotent; Neon Postgres via Secret Manager)"
+    DATABASE_URL="$(gcloud secrets versions access latest --secret "${DATABASE_SECRET_NAME}" --project "${PROJECT_ID}" --account "${GCLOUD_ACCOUNT}")" \
+        node scripts/db-migrate.js
+
+    echo "==> [5/5] Cloud Run deploy"
     gcloud run deploy "${SERVICE_NAME}" \
         --image "${IMAGE_URI}" \
         --platform managed \
@@ -111,7 +122,8 @@ deploy_production() {
         --concurrency 80 \
         --timeout 60 \
         --max-instances 10 \
-        --set-env-vars "APP_BASE_PATH=${CANONICAL_PATH},APP_LEGACY_BASE_PATHS=${LEGACY_PATH},NODE_ENV=production,GOOGLE_SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID},GOOGLE_SHEETS_TAB=${SHEETS_TAB}"
+        --set-env-vars "APP_BASE_PATH=${CANONICAL_PATH},APP_LEGACY_BASE_PATHS=${LEGACY_PATH},NODE_ENV=production,GOOGLE_SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID},GOOGLE_SHEETS_TAB=${SHEETS_TAB}" \
+        --set-secrets "${SECRETS}"
 
     echo
     echo "==> Prefixed service deployed."
@@ -123,7 +135,7 @@ deploy_vanity() {
     echo "==> Deploying to ${VANITY_HOST}/"
     echo "    project=${PROJECT_ID}  service=${VANITY_SERVICE_NAME}  account=${GCLOUD_ACCOUNT}"
     echo "    Reusing image built by 'production': ${IMAGE_URI}"
-    echo "    (APP_BASE_PATH is runtime-only, so no rebuild is needed.)"
+    echo "    (APP_BASE_PATH is runtime-only, so no rebuild is needed; migrations ran in 'production'.)"
 
     echo "==> [1/1] Cloud Run deploy"
     gcloud run deploy "${VANITY_SERVICE_NAME}" \
@@ -140,7 +152,8 @@ deploy_vanity() {
         --concurrency 80 \
         --timeout 60 \
         --max-instances 10 \
-        --set-env-vars "APP_BASE_PATH=${VANITY_PATH},NODE_ENV=production,GOOGLE_SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID},GOOGLE_SHEETS_TAB=${SHEETS_TAB}"
+        --set-env-vars "APP_BASE_PATH=${VANITY_PATH},NODE_ENV=production,GOOGLE_SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID},GOOGLE_SHEETS_TAB=${SHEETS_TAB}" \
+        --set-secrets "${SECRETS}"
 
     echo
     echo "==> Vanity deploy complete. Run './deploy.sh validate' to verify."

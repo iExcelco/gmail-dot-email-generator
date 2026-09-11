@@ -150,7 +150,7 @@ export async function sendResultsEmail({ to, baseEmail, mode, variations }) {
   let html;
   let text;
   try {
-    const mailClient = getClient();
+    getClient(); // fail fast here (setup error) when the API key is missing
     inboxId = process.env.AGENTMAIL_INBOX_ID || DEFAULT_INBOX_ID;
 
     const payload = { baseEmail, mode, variations };

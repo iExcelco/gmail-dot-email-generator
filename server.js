@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SheetService, generateLeadId } from './lib/sheetService.js';
 import { validateEmail } from './lib/emailValidator.js';
-import { parseGmailAddress } from './gmailDots.js';
+import { parseGmailAddress, buildVariantSet } from './gmailDots.js';
 import { sendResultsEmail } from './email-service.js';
+import { captureLeadAndRun, recordResultsEmail } from './lib/lead-capture-service.js';
+import { isDbEnabled } from './lib/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,7 +21,9 @@ if (fs.existsSync(envFile)) {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
-    if (!process.env[m[1]]) process.env[m[1]] = value;
+    // Only fill vars that are truly unset: an explicitly empty var (e.g.
+    // `AGENTMAIL_API_KEY= ./scripts/dev-with-secrets.sh`) must stay empty.
+    if (process.env[m[1]] === undefined) process.env[m[1]] = value;
   }
 }
 
@@ -34,7 +38,6 @@ const LEGACY_BASE_PATHS = (process.env.APP_LEGACY_BASE_PATHS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 const BASE_PATHS = [...new Set([PRIMARY_BASE_PATH, ...LEGACY_BASE_PATHS])];
-const BASE_PATH = PRIMARY_BASE_PATH; // kept for existing log/output references
 const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 const TAB_NAME = process.env.GOOGLE_SHEETS_TAB || 'gmail-email-generator';
 
@@ -126,21 +129,9 @@ async function logRoute(req, res) {
     consent: consent ? 'yes' : 'no'
   };
 
-  if (sheetService) {
-    try {
-      await sheetService.appendRow(record);
-    } catch (error) {
-      console.error('[sheets] append failed:', error.message);
-      return res.json({ ok: true, leadId: record.leadId, logged: false });
-    }
-  } else {
-    // Visibility: when sheets isn't configured we still want to see what
-    // would have been written. Helps GDV-005 root-cause diagnosis in prod
-    // logs without needing to redeploy.
-    console.log('[sheets:disabled] would-log lead:', JSON.stringify(record));
-  }
-
-  res.json({ ok: true, leadId: record.leadId, logged: !!sheetService });
+  // Lead -> DB + sheet, run -> DB, then finalize both. Never throws.
+  const result = await captureLeadAndRun(record, { sheetService, site: req.get('host') || '' });
+  res.json({ ok: true, leadId: result.leadId, runId: result.runId, logged: result.logged });
 }
 
 for (const bp of BASE_PATHS) {
@@ -152,7 +143,7 @@ if (!BASE_PATHS.includes('/')) {
 }
 
 async function sendResultsRoute(req, res) {
-  const { email, baseEmail, mode, variations, workspaceDomain, isWorkspace } = req.body || {};
+  const { email, baseEmail, mode, workspaceDomain, isWorkspace, plusTagsUsed, leadId } = req.body || {};
 
   if (typeof email !== 'string' || !email) {
     return res.status(400).json({ ok: false, error: 'email required' });
@@ -181,23 +172,34 @@ async function sendResultsRoute(req, res) {
     }
   }
 
-  if (!Array.isArray(variations) || variations.length === 0) {
-    return res.status(400).json({ ok: false, error: 'variations required' });
+  // Rebuild the variations here (same function the page uses) instead of
+  // trusting a client-sent list: a list of thousands blew past the browser's
+  // 64 KB keepalive limit so the request never left the page, and it let any
+  // caller put arbitrary text in an email sent from our inbox.
+  const set = buildVariantSet(email, {
+    mode,
+    workspaceDomain: useWorkspace ? wsDomain : '',
+    plusTags: Array.isArray(plusTagsUsed) ? plusTagsUsed.filter((t) => typeof t === 'string').slice(0, 50) : []
+  });
+  if (!set) {
+    return res.status(400).json({ ok: false, error: 'invalid email' });
   }
+  const variations = [set.primary, ...set.extras];
 
   // EMAIL-GDV-500: Do NOT block the response on email failures. If AgentMail
   // is misconfigured or the template throws, we still return 200 so the UI
   // doesn't show a generic 500 to the user — their variations already
   // rendered client-side. We log the failure for ops.
+  let sendError = null;
   try {
     await sendResultsEmail({
       to: email,
       baseEmail: baseEmail || email,
-      mode: mode || 'wordSplit',
+      mode: set.mode,
       variations,
     });
-    res.json({ ok: true, emailQueued: true });
   } catch (error) {
+    sendError = error;
     console.error('[email] send failed:', {
       message: error && error.message,
       name: error && error.name,
@@ -206,8 +208,17 @@ async function sendResultsRoute(req, res) {
       mode,
       variationCount: variations.length,
     });
-    res.json({ ok: true, emailQueued: false });
   }
+
+  // Every send is recorded (exports row, lead marked emailed in DB + sheet). Never throws.
+  await recordResultsEmail({
+    leadId: typeof leadId === 'string' ? leadId : '',
+    email,
+    ok: !sendError,
+    error: sendError ? sendError.message || String(sendError) : null
+  }, { sheetService });
+
+  res.json({ ok: true, emailQueued: !sendError });
 }
 
 for (const bp of BASE_PATHS) {
@@ -233,4 +244,5 @@ app.listen(PORT, () => {
   console.log(`Gmail Dot Generator running on port ${PORT}`);
   console.log(`Base paths: ${BASE_PATHS.join(', ')}`);
   console.log(`Sheets logging: ${sheetService ? `enabled (tab="${TAB_NAME}")` : 'DISABLED'}`);
+  console.log(`Database: ${isDbEnabled() ? 'enabled (schema gdg)' : 'DISABLED (DATABASE_URL not set)'}`);
 });
