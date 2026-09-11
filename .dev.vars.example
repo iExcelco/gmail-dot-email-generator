@@ -1,0 +1,25 @@
+# =============================================================================
+# .dev.vars.example — Cloudflare Workers local secrets template (GDV)
+# =============================================================================
+# Copy to `.dev.vars` (git-ignored) for local `npm run cf:dev` / wrangler dev.
+# These load as `env.*` inside worker/index.js.
+# In PRODUCTION, set each with:  wrangler secret put <NAME>   (see docs/CLOUDFLARE.md)
+# Do NOT commit real values.
+#
+# Non-secret vars (APP_BASE_PATH, APP_LEGACY_BASE_PATHS, GOOGLE_SHEETS_*) live
+# in wrangler.jsonc, not here. Override APP_BASE_PATH locally below to test the
+# vanity ("/") vs prefixed ("/gmail-dot-trick") base path.
+# -----------------------------------------------------------------------------
+
+# --- Google Sheets service-account key (SECRET) ---
+# The FULL service-account JSON, single line. This replaces Cloud Run's keyless
+# Application Default Credentials. The account only needs Sheets access to the
+# one spreadsheet. Rotate periodically (see docs/CLOUDFLARE.md security note).
+GOOGLE_SA_KEY='{"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"gmail-dot-gen-sheets@iexcel-agents.iam.gserviceaccount.com",...}'
+
+# --- Email delivery: AgentMail (SECRET) ---
+AGENTMAIL_API_KEY="your-agentmail-api-key"
+
+# --- Optional overrides (non-secret; usually left to code/wrangler defaults) ---
+# AGENTMAIL_INBOX_ID="iexcelagent@agentmail.to"
+# APP_BASE_PATH="/"                      # uncomment to test the vanity base path locally

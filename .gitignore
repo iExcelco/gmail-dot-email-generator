@@ -26,3 +26,11 @@ node_modules
 # Service account keys
 .secrets/
 *.key.json
+
+# Cloudflare Workers
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+# Generated Workers static-assets dir (built from service-page.html by cf:sync)
+public/

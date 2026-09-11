@@ -3,9 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SheetService, generateLeadId } from './lib/sheetService.js';
-import { validateEmail } from './lib/emailValidator.js';
-import { parseGmailAddress } from './gmailDots.js';
 import { sendResultsEmail } from './email-service.js';
+import { handleLog, handleSendResults } from './lib/core.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,83 +63,25 @@ if (!sheetService) {
   console.warn('[sheets] GOOGLE_SHEETS_SPREADSHEET_ID not set — /api/log will accept but not persist.');
 }
 
+// Thin Express adapter over the runtime-agnostic core (lib/core.js). All the
+// validation / record-building / persistence logic lives in core so the
+// Cloudflare Workers entrypoint (worker/index.js) runs byte-identical logic.
 async function logRoute(req, res) {
-  const {
-    email,
-    mode,
-    variantCount,
-    firstVariant,
-    workspaceDomain,
-    isWorkspace,
-    plusTagsUsed,
-    plusVariantCount,
-    consent
-  } = req.body || {};
-
-  if (typeof email !== 'string' || !email) {
-    return res.status(400).json({ ok: false, error: 'email required' });
-  }
-
-  // In Workspace mode we deliberately skip the Gmail-only validateEmail check
-  // because the user is using a custom company domain. We still parse the
-  // address to make sure it's structurally a valid email and that the local
-  // part is gmail-rules-compatible (letters/numbers/dots only).
-  const wsDomain = typeof workspaceDomain === 'string' ? workspaceDomain.trim().toLowerCase() : '';
-  const useWorkspace = !!isWorkspace && !!wsDomain;
-
-  if (!useWorkspace) {
-    const validation = validateEmail(email);
-    if (!validation.valid) {
-      return res.status(400).json({ ok: false, error: validation.reason });
+  const { status, body } = await handleLog(
+    {
+      body: req.body,
+      userAgent: req.headers['user-agent'] || '',
+      ip: (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) || req.ip || ''
+    },
+    {
+      generateLeadId,
+      appendRow: sheetService ? (record) => sheetService.appendRow(record) : null,
+      // Visibility: when sheets isn't configured we still log what WOULD have
+      // been written. Helps GDV-005 root-cause diagnosis without a redeploy.
+      onDisabled: (record) => console.log('[sheets:disabled] would-log lead:', JSON.stringify(record))
     }
-  }
-
-  const parsed = parseGmailAddress(email, useWorkspace ? { workspaceDomain: wsDomain } : undefined);
-  if (!parsed) {
-    return res.status(400).json({
-      ok: false,
-      error: useWorkspace ? 'invalid email for the supplied workspace domain' : 'invalid gmail address'
-    });
-  }
-
-  const safePlusTags = Array.isArray(plusTagsUsed)
-    ? plusTagsUsed.filter((t) => typeof t === 'string').slice(0, 50).join(',')
-    : '';
-
-  const record = {
-    timestamp: new Date().toISOString(),
-    leadId: generateLeadId(),
-    inputEmail: email,
-    baseLocal: parsed.baseLocal,
-    domain: parsed.domain,
-    plusTag: parsed.plusTag || '',
-    mode: mode === 'all' ? 'all' : 'wordSplit',
-    variantCount: Number.isFinite(variantCount) ? variantCount : '',
-    firstVariant: typeof firstVariant === 'string' ? firstVariant : '',
-    userAgent: (req.headers['user-agent'] || '').slice(0, 500),
-    ip: (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) || req.ip || '',
-    isWorkspace: useWorkspace ? 'yes' : 'no',
-    workspaceDomain: useWorkspace ? wsDomain : '',
-    plusTagsUsed: safePlusTags,
-    plusVariantCount: Number.isFinite(plusVariantCount) ? plusVariantCount : '',
-    consent: consent ? 'yes' : 'no'
-  };
-
-  if (sheetService) {
-    try {
-      await sheetService.appendRow(record);
-    } catch (error) {
-      console.error('[sheets] append failed:', error.message);
-      return res.json({ ok: true, leadId: record.leadId, logged: false });
-    }
-  } else {
-    // Visibility: when sheets isn't configured we still want to see what
-    // would have been written. Helps GDV-005 root-cause diagnosis in prod
-    // logs without needing to redeploy.
-    console.log('[sheets:disabled] would-log lead:', JSON.stringify(record));
-  }
-
-  res.json({ ok: true, leadId: record.leadId, logged: !!sheetService });
+  );
+  res.status(status).json(body);
 }
 
 for (const bp of BASE_PATHS) {
@@ -152,62 +93,11 @@ if (!BASE_PATHS.includes('/')) {
 }
 
 async function sendResultsRoute(req, res) {
-  const { email, baseEmail, mode, variations, workspaceDomain, isWorkspace } = req.body || {};
-
-  if (typeof email !== 'string' || !email) {
-    return res.status(400).json({ ok: false, error: 'email required' });
-  }
-
-  // Workspace-mode bypass — mirrors the pattern in /api/log so users on
-  // custom Google Workspace domains (e.g. Micah@iexcel.co) can request
-  // emailed results without tripping the Gmail-only validator.
-  const wsDomain = typeof workspaceDomain === 'string' ? workspaceDomain.trim().toLowerCase() : '';
-  const useWorkspace = !!isWorkspace && !!wsDomain;
-
-  if (!useWorkspace) {
-    const validation = validateEmail(email);
-    if (!validation.valid) {
-      return res.status(400).json({ ok: false, error: validation.reason });
-    }
-  } else {
-    // Light structural sanity check for workspace-mode addresses since we
-    // skipped the strict Gmail-only validator above.
-    const parsed = parseGmailAddress(email, { workspaceDomain: wsDomain });
-    if (!parsed) {
-      return res.status(400).json({
-        ok: false,
-        error: 'invalid email for the supplied workspace domain'
-      });
-    }
-  }
-
-  if (!Array.isArray(variations) || variations.length === 0) {
-    return res.status(400).json({ ok: false, error: 'variations required' });
-  }
-
-  // EMAIL-GDV-500: Do NOT block the response on email failures. If AgentMail
-  // is misconfigured or the template throws, we still return 200 so the UI
-  // doesn't show a generic 500 to the user — their variations already
-  // rendered client-side. We log the failure for ops.
-  try {
-    await sendResultsEmail({
-      to: email,
-      baseEmail: baseEmail || email,
-      mode: mode || 'wordSplit',
-      variations,
-    });
-    res.json({ ok: true, emailQueued: true });
-  } catch (error) {
-    console.error('[email] send failed:', {
-      message: error && error.message,
-      name: error && error.name,
-      stack: error && error.stack,
-      to: email,
-      mode,
-      variationCount: variations.length,
-    });
-    res.json({ ok: true, emailQueued: false });
-  }
+  const { status, body } = await handleSendResults(
+    { body: req.body },
+    { sendEmail: (args) => sendResultsEmail(args) }
+  );
+  res.status(status).json(body);
 }
 
 for (const bp of BASE_PATHS) {

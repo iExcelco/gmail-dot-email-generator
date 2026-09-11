@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "cf:sync": "node scripts/sync-worker-assets.mjs",
+    "cf:dev": "npm run cf:sync && wrangler dev",
+    "cf:deploy": "npm run cf:sync && wrangler deploy"
   },
   "dependencies": {
     "agentmail": "^0.4.18",
     "express": "^5.2.1",
     "googleapis": "^171.4.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.59.2"
   }
 }

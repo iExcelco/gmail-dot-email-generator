@@ -1,0 +1,83 @@
+{
+  // Cloudflare Workers deployment config for the iExcel Gmail Dot Variations
+  // Generator (GDV). This is the Workers counterpart to the Cloud Run image;
+  // both are built from the same repo and run the same runtime-agnostic core.
+  //
+  // GDV is a plain static page + two API routes — NOT Next.js — so it needs no
+  // OpenNext build. The entrypoint is a hand-written fetch handler.
+  //
+  // Deploy account: the ads@iexcel.co Cloudflare account. `account_id` is
+  // intentionally omitted so `wrangler` uses whichever account you are
+  // authenticated as (or CLOUDFLARE_ACCOUNT_ID) — authenticate as ads@iexcel.co
+  // before deploying. See docs/CLOUDFLARE.md.
+  //
+  // Editor autocomplete + validation:
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // ---- Top-level env == the PREFIXED deployment (agents.iexcel.co/gmail-dot-trick) ----
+  "name": "ixl-gmail-dot-generator",
+  "main": "worker/index.js",
+
+  // Must be >= 2024-09-23 for full `nodejs_compat`. Matches the sibling LPA repo.
+  "compatibility_date": "2025-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // agentmail dynamically imports the optional `@x402/fetch` payment package
+  // only when constructed with an `x402` option (which GDV never does). The
+  // package isn't installed, and esbuild resolves the dynamic-import specifier
+  // at build time, so we alias it to a throwing stub to keep the build green.
+  // This key is inheritable, so it also applies to env.vanity.
+  "alias": {
+    "@x402/fetch": "./worker/stubs/x402-fetch.js"
+  },
+
+  // Static page served via the ASSETS binding. `public/` is generated from the
+  // root service-page.html by `npm run cf:sync` (wired into cf:dev / cf:deploy).
+  // run_worker_first: true so worker/index.js owns all routing (base paths, the
+  // /api/* routes, and the 301) and defers to assets only when it chooses to.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    // Serve files exactly as named — no auto trailing-slash redirects. The
+    // worker owns all routing; assets are only reached via ASSETS.fetch or the
+    // fallback, so we don't want the asset server rewriting paths.
+    "html_handling": "none"
+  },
+
+  // Non-secret runtime config. Base path is read at RUNTIME by worker/index.js
+  // (exactly like server.js), so one build serves both deployments.
+  // SECRETS are NOT here — set them with `wrangler secret put`:
+  //   GOOGLE_SA_KEY        service-account JSON (Sheets private key)
+  //   AGENTMAIL_API_KEY    AgentMail bearer token
+  "vars": {
+    "APP_BASE_PATH": "/gmail-dot-trick",
+    "APP_LEGACY_BASE_PATHS": "",
+    "GOOGLE_SHEETS_SPREADSHEET_ID": "12y0qOlzsx5U8sV5jV7sgJW88BOQli9ENC6w1nLiTKLA",
+    "GOOGLE_SHEETS_TAB": "gmail-email-generator"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  // ---- The VANITY deployment (gmaildottrick.co, base path "/") ----
+  // Deploy with:  npm run cf:deploy -- --env vanity
+  // `vars` is a non-inheritable key, so ALL vars are repeated here (only
+  // APP_BASE_PATH differs). `main`, `assets`, and compatibility_* are
+  // inheritable and carry over from the top level.
+  "env": {
+    "vanity": {
+      "name": "ixl-gmail-dot-generator-vanity",
+      "vars": {
+        "APP_BASE_PATH": "/",
+        "APP_LEGACY_BASE_PATHS": "",
+        "GOOGLE_SHEETS_SPREADSHEET_ID": "12y0qOlzsx5U8sV5jV7sgJW88BOQli9ENC6w1nLiTKLA",
+        "GOOGLE_SHEETS_TAB": "gmail-email-generator"
+      },
+      "observability": {
+        "enabled": true
+      }
+    }
+  }
+}
