@@ -1344,13 +1344,7 @@
   </footer>
 
   <script type="module">
-    import {
-      generateGmailDotVariants,
-      parseGmailAddress,
-      generatePlusTagVariants,
-      normalizePlusTags,
-      DEFAULT_PLUS_TAGS
-    } from './gmailDots.js';
+    import { buildVariantSet } from './gmailDots.js';
 
     const form = document.getElementById('generatorForm');
     const emailInput = document.getElementById('emailInput');
@@ -1503,13 +1497,6 @@
       return selected ? selected.value : 'wordSplit';
     }
 
-    function deriveNoDotVariant(parsed) {
-      return `${parsed.baseLocal}${parsed.plusTag}@${parsed.domain}`;
-    }
-
-    function dedupe(values) {
-      return [...new Set(values)];
-    }
 
     async function copyText(text) {
       if (!text) return;
@@ -1580,12 +1567,13 @@
       nextPageBtn.disabled = safePage >= totalPages;
     }
 
+    // Shared with the server (gmailDots.js) so what the page shows is exactly
+    // what gets saved for the run. Empty plus-tag field -> DEFAULT_PLUS_TAGS.
     function generateVariants(address, mode) {
       const workspaceDomain = getWorkspaceDomain();
-      const parserOptions = workspaceDomain ? { workspaceDomain } : undefined;
-      const parsed = parseGmailAddress(address, parserOptions);
+      const result = buildVariantSet(address, { mode, workspaceDomain, plusTags: plusTagsInput.value });
 
-      if (!parsed) {
+      if (!result) {
         return {
           error: workspaceDomain
             ? 'Enter a valid email at your Workspace domain (letters, numbers, dots in local part).'
@@ -1593,59 +1581,7 @@
         };
       }
 
-      const noDot = deriveNoDotVariant(parsed);
-      const generatorOptions = workspaceDomain ? { workspaceDomain } : {};
-      const wordSplit = (generateGmailDotVariants(address, { ...generatorOptions, mode: 'wordSplit' })[0] || noDot).toLowerCase();
-
-      // Resolve the +alias tags. If the user typed something into the
-      // plus-tag field we use that; otherwise we fall back to the curated
-      // default list so users still see useful examples.
-      const userTags = normalizePlusTags(plusTagsInput.value);
-      const tagsToUse = userTags.length ? userTags : [...DEFAULT_PLUS_TAGS];
-
-      // Build +alias variants on the dot-stripped base local AND on the
-      // word-split local (e.g. john.smith+signup@gmail.com) so users see
-      // both shapes.
-      const wordSplitLocal = wordSplit.split('@')[0];
-      const plusBase = generatePlusTagVariants(parsed, { tags: tagsToUse });
-      const plusSplit = wordSplitLocal !== parsed.baseLocal
-        ? generatePlusTagVariants(parsed, { tags: tagsToUse, localOverride: wordSplitLocal })
-        : [];
-
-      let extras = [];
-      let modeWarning = '';
-
-      if (mode === 'all') {
-        try {
-          const all = generateGmailDotVariants(address, { ...generatorOptions, mode: 'all' });
-          extras = dedupe(all)
-            .map((variant) => variant.toLowerCase())
-            .filter((variant) => variant !== noDot.toLowerCase() && variant !== wordSplit);
-        } catch (error) {
-          modeWarning = error instanceof RangeError
-            ? 'All mode exceeds safe permutation limits for this local-part length. Showing word split only.'
-            : 'Unable to generate all-mode variants. Showing word split only.';
-        }
-      }
-
-      // Append +alias variants to the extras list. They are unique by
-      // construction (different "+tag" segment) so we just dedupe against
-      // primary/noDot defensively.
-      const plusVariants = dedupe([...plusBase, ...plusSplit])
-        .filter((v) => v !== noDot.toLowerCase() && v !== wordSplit);
-      extras = dedupe([...extras, ...plusVariants]);
-
-      return {
-        mode,
-        noDot: noDot.toLowerCase(),
-        primary: wordSplit,
-        extras,
-        plusVariants,
-        plusTagsUsed: tagsToUse,
-        workspaceDomain,
-        isWorkspace: !!workspaceDomain,
-        modeWarning
-      };
+      return result;
     }
 
     function renderOutput(payload) {
@@ -1689,10 +1625,12 @@
       }
     }
 
+    // Resolves to the /api/log response ({ leadId, runId, ... }) or null, so
+    // the results email can be tied back to the saved lead and run.
     function logToSheet(email, payload) {
-      if (payload.error) return;
+      if (payload.error) return Promise.resolve(null);
       const variantCount = 1 + (payload.extras ? payload.extras.length : 0);
-      fetch('/api/log', {
+      return fetch('/api/log', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -1707,15 +1645,12 @@
           plusVariantCount: payload.plusVariants ? payload.plusVariants.length : 0
         }),
         keepalive: true
-      }).catch(() => {});
+      }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
     }
 
-    function sendResultsEmail(email, payload) {
+    function sendResultsEmail(email, payload, ids) {
       if (payload.error) return;
       if (!consentCheckbox.checked) return;
-
-      const allVariations = [payload.primary, ...payload.extras].filter(Boolean);
-      if (!allVariations.length) return;
 
       fetch('/api/send-results', {
         method: 'POST',
@@ -1724,9 +1659,10 @@
           email,
           baseEmail: email,
           mode: payload.mode,
-          variations: allVariations,
+          plusTagsUsed: payload.plusTagsUsed || [],
           workspaceDomain: payload.workspaceDomain || '',
-          isWorkspace: !!payload.isWorkspace
+          isWorkspace: !!payload.isWorkspace,
+          leadId: (ids && ids.leadId) || ''
         }),
         keepalive: true
       }).catch(() => {});
@@ -1756,8 +1692,7 @@
           email_domain: email.split('@')[1] || ''
         });
       }
-      logToSheet(email, payload);
-      sendResultsEmail(email, payload);
+      logToSheet(email, payload).then((ids) => sendResultsEmail(email, payload, ids));
     });
 
     form.addEventListener('change', (event) => {

@@ -5,11 +5,19 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "db:migrate": "node scripts/db-migrate.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "agentmail": "^0.4.18",
     "express": "^5.2.1",
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0"
   }
 }

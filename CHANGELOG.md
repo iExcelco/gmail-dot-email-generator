@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - Unreleased
+### Added
+- **Lead database.** Every lead and every run is saved to the shared Neon Postgres in this app's own schema `gdg` (`leads`, `runs`, `variants`, `exports`, `events`), plus one row per lead in the shared `public.leads`. The database is the source of truth; the sheet keeps working as before.
+- `buildVariantSet()` in `gmailDots.js`: one function for what a run generates, used by both the page and the server.
+- Sheet tab gets 4 columns at the end: `Lead Status`, `Run ID`, `Dot Variant Count`, `Results Emailed`. The row is appended at capture and updated in place when the run finishes and when the results email goes out.
+- `scripts/db-migrate.js` (`npm run db:migrate`), `scripts/dev-with-secrets.sh`, ESLint (`npm run lint`).
+
+### Fixed
+- **Results email never sent in production**: neither Cloud Run service had `AGENTMAIL_API_KEY`. `deploy.sh` now mounts it from Secret Manager on both services.
+- **Results email silently dropped for large all-mode runs**: the page sent the full variant list with `keepalive`, and browsers refuse keepalive bodies over 64 KB (~2,000+ variants). The server now rebuilds the variants itself, which also stops `/api/send-results` from emailing caller-supplied text.
+- `.env.local` no longer overrides a variable that is explicitly set to empty.
+
 ## [1.3.0] - 2026-05-03
 ### Changed
 - Renamed canonical public path from `/gmail-dot-email-generator` to `/gmail-dot-variations-generator`. Legacy path still serves via `APP_LEGACY_BASE_PATHS`.

@@ -73,9 +73,35 @@ What it does (in order):
 1. `npm ci` — clean install
 2. `npm test` — must pass; deploy aborts on failure
 3. `gcloud builds submit` — builds Docker image via Cloud Build, pushes to GCR
-4. `gcloud run deploy` — rolls out new revision at 100% traffic
+4. `node scripts/db-migrate.js` — applies `db/migrations/*.sql` to Neon (idempotent)
+5. `gcloud run deploy` — rolls out new revision at 100% traffic, with `DATABASE_URL` and `AGENTMAIL_API_KEY` from Secret Manager
 
 Typical runtime: **3–5 min**.
+
+---
+
+## Lead database (Neon Postgres)
+
+Every `/api/log` call is one lead + one run. Order: lead → `gdg.leads` + one row in the shared `public.leads` → sheet row appended (row number stored on the lead) → the run is rebuilt server-side with `buildVariantSet` (same function the page uses) and saved with every variant in one transaction → the lead and the same sheet row are finalized. Every results email (`/api/send-results`) writes a `gdg.exports` row, success or failure.
+
+| Thing | Value |
+|---|---|
+| Connection string | Secret Manager `DATABASE_URL` (project `iexcel-agents`) |
+| This app's schema | `gdg` — `leads`, `runs` (full output in `report jsonb`), `variants`, `exports`, `events`, `migrations` |
+| Shared table | `public.leads` — INSERT one row per lead only; the rest of `public.*` is Drizzle-managed by the Free Digital Marketing Audit. Never alter it. `asg.*` belongs to the AI Search Grader. |
+| Migrations | `npm run db:migrate` (needs `DATABASE_URL`); runs automatically in `./deploy.sh production` |
+
+With `DATABASE_URL` unset (plain `./deploy.sh local`, tests), every DB call is a no-op.
+
+**Runtime SA secret access.** `gmail-dot-gen-sheets@…` must hold `roles/secretmanager.secretAccessor` on both `DATABASE_URL` and `AGENTMAIL_API_KEY`, or the Cloud Run deploy fails:
+
+```bash
+for s in DATABASE_URL AGENTMAIL_API_KEY; do
+  gcloud secrets add-iam-policy-binding "$s" --project iexcel-agents \
+    --member serviceAccount:gmail-dot-gen-sheets@iexcel-agents.iam.gserviceaccount.com \
+    --role roles/secretmanager.secretAccessor
+done
+```
 
 ---
 
@@ -105,6 +131,15 @@ Expected: `200`. Page title in the response body should be `Free Gmail Dot Varia
 
 Serves at http://localhost:8080 with `APP_BASE_PATH=/`. No Cloud Run, no build, just `node server.js`. Reads `.env.local` for credentials.
 
+With production secrets and the real database:
+
+```bash
+./scripts/dev-with-secrets.sh                        # real DB, real sheet tab, real emails
+AGENTMAIL_API_KEY= ./scripts/dev-with-secrets.sh     # same, but no emails go out
+```
+
+Secrets are pulled from Secret Manager into the process env only; migrations run first.
+
 ---
 
 ## Troubleshooting
@@ -123,4 +158,4 @@ Serves at http://localhost:8080 with `APP_BASE_PATH=/`. No Cloud Run, no build, 
 
 - No CI/CD pipeline. Deploys are manual via `./deploy.sh production`.
 - No staging environment. Production is the only Cloud Run service.
-- No secrets in this file. All credentials live in `.env.local` (local) and the runtime SA (production).
+- No secrets in this file. Production secrets live in Secret Manager (`DATABASE_URL`, `AGENTMAIL_API_KEY`); local ones in `.env.local` or `scripts/dev-with-secrets.sh`.
