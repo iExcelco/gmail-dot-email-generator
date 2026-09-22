@@ -41,7 +41,8 @@ function harness({ leadRow = null, appendRow = async () => 47 } = {}) {
   setPoolForTests({ query: client.query, connect: async () => client });
   const sheetService = {
     appendRow: async (rec) => { calls.push({ at: 'sheet.append', rec }); return appendRow(rec); },
-    updateFields: async (row, fields) => { calls.push({ at: 'sheet.update', row, fields }); return true; }
+    updateFields: async (row, fields) => { calls.push({ at: 'sheet.update', row, fields }); return true; },
+    appendAllLeadsRow: async (rec) => { calls.push({ at: 'sheet.allLeads', rec }); return true; }
   };
   const done = () => { delete process.env.DATABASE_URL; setPoolForTests(null); };
   return { calls, sheetService, done };
@@ -91,7 +92,9 @@ test('captureLeadAndRun: lead -> DB -> sheet -> run -> finalize, in that order',
   assert.ok(f.params.includes('completed') && f.params.includes(result.runId));
 
   const stages = calls.filter((c) => c.text?.startsWith('insert into gdg.events')).map((c) => c.params[1]);
-  assert.deepEqual(stages, ['capture', 'sheet_append', 'generate', 'saved', 'sheet_update', 'done']);
+  assert.deepEqual(stages, ['capture', 'sheet_append', 'all_leads_append', 'generate', 'saved', 'sheet_update', 'done']);
+  const allLeads = calls.find((c) => c.at === 'sheet.allLeads');
+  assert.equal(allLeads.rec.leadId, 'IXL-GDG-20260911-000000-abc123', 'lead synced to [data] all-leads');
   const gdgLeadParams = calls[gdgLead].params;
   assert.equal(gdgLeadParams[6], 'gmaildottrick.co', 'site recorded');
   done();
