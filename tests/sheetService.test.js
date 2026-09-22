@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SheetService, buildSheetRow, parseUpdatedRangeRowNumber } from '../lib/sheetService.js';
+import { SheetService, buildSheetRow, buildAllLeadsRow, parseUpdatedRangeRowNumber } from '../lib/sheetService.js';
 
 const ORIGINAL_16 = [
   'Timestamp', 'Lead ID', 'Input Email', 'Base Local', 'Domain', 'Plus Tag', 'Mode', 'Variant Count', 'First Variant',
@@ -66,4 +66,18 @@ test('updateFields writes only the named cells of the same row', async () => {
   assert.deepEqual(second.req.requestBody.data, [{ range: 'gmail-email-generator!T47', values: [['failed']] }]);
   assert.ok(!calls.some((c) => c.op === 'update'), 'header already current: not rewritten');
   assert.equal(await s.updateFields(null, { leadStatus: 'x' }), false);
+});
+
+test('all-leads sync: row matches the shared tab columns and appends to [data] all-leads', async () => {
+  const row = buildAllLeadsRow({ timestamp: 't', leadId: 'IXL-GDG-1', inputEmail: 'a@gmail.com', domain: 'gmail.com' });
+  assert.equal(row.length, 18, 'Tool..PDL Enriched');
+  assert.deepEqual(row.slice(0, 5), ['IXL-GDG', 't', 'IXL-GDG-1', 'a@gmail.com', 'gmail.com']);
+  assert.equal(row[17], 'No');
+  assert.ok(row.slice(5, 17).every((v) => v === ''));
+
+  const { s, calls } = service([...ORIGINAL_16, 'Lead Status', 'Run ID', 'Dot Variant Count', 'Results Emailed']);
+  await s.appendAllLeadsRow({ leadId: 'IXL-GDG-1' });
+  const append = calls.find((c) => c.op === 'append');
+  assert.equal(append.req.range, "'[data] all-leads'!A:R");
+  assert.equal(append.req.insertDataOption, 'INSERT_ROWS');
 });

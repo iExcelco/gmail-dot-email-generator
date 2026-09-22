@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4.0] - Unreleased
+## [1.5.0] - 2026-09-22
+### Added
+- **Lead sync:** every lead is also appended to the cross-tool `[data] all-leads` tab of the IRP Lead Intelligence sheet (`Tool = IXL-GDG`), next to LeadGen, AI Search Grader and Landing Page Analyzer. `scripts/backfill-all-leads.js` backfilled the 49 existing leads (skips Lead IDs already there) and made the `[pivot] all-leads` source open-ended (it was fixed to rows 1-38).
+
+## [1.4.0] - 2026-09-12
 ### Added
 - **Lead database.** Every lead and every run is saved to the shared Neon Postgres in this app's own schema `gdg` (`leads`, `runs`, `variants`, `exports`, `events`), plus one row per lead in the shared `public.leads`. The database is the source of truth; the sheet keeps working as before.
 - `buildVariantSet()` in `gmailDots.js`: one function for what a run generates, used by both the page and the server.
