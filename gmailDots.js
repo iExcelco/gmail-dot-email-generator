@@ -100,8 +100,8 @@ export function parseGmailAddress(value, options = {}) {
   //   - default: gmail.com / googlemail.com (consumer Gmail)
   //   - Google Workspace mode: any valid domain explicitly allowed by the
   //     caller via `options.workspaceDomain` or `options.allowAnyDomain`.
-  //     Workspace inboxes inherit Gmail's dot-and-plus aliasing, so the
-  //     same generator logic applies once we accept the domain.
+  //     Workspace routes +tags like Gmail but does NOT ignore dots; see
+  //     buildVariantSet, which only offers +tag versions for these.
   const allowedWorkspaceDomain = typeof options.workspaceDomain === 'string'
     ? options.workspaceDomain.trim().toLowerCase()
     : '';
@@ -141,6 +141,10 @@ export function parseGmailAddress(value, options = {}) {
   return {
     baseLocal,
     casedLocal,
+    // Local part exactly as typed (minus any +tag), dots kept. On Google
+    // Workspace domains dots are part of the address, so this is the only
+    // correct base there.
+    rawLocal: localBeforePlus.toLowerCase(),
     plusTag,
     domain,
     isWorkspace: !isGmailConsumer
@@ -336,12 +340,34 @@ export function buildVariantSet(address, options = {}) {
   const parsed = parseGmailAddress(address, workspaceDomain ? { workspaceDomain } : undefined);
   if (!parsed) return null;
 
+  const userTags = normalizePlusTags(options.plusTags);
+  const plusTagsUsed = userTags.length ? userTags : [...DEFAULT_PLUS_TAGS];
+
+  // Google Workspace (company) addresses: Gmail only ignores dots on @gmail.com,
+  // so dotted versions of a company address are different mailboxes. Keep the
+  // address exactly as typed and offer +tag versions only, which Workspace routes.
+  // https://support.google.com/mail/answer/7436150
+  if (parsed.isWorkspace) {
+    const own = `${parsed.rawLocal}${parsed.plusTag}@${parsed.domain}`;
+    const plusVariants = generatePlusTagVariants(parsed, { tags: plusTagsUsed, localOverride: parsed.rawLocal })
+      .filter((v) => v !== own);
+    return {
+      mode,
+      parsed,
+      noDot: own,
+      primary: own,
+      extras: plusVariants,
+      plusVariants,
+      plusTagsUsed,
+      workspaceDomain,
+      isWorkspace: true,
+      modeWarning: ''
+    };
+  }
+
   const noDot = `${parsed.baseLocal}${parsed.plusTag}@${parsed.domain}`.toLowerCase();
   const generatorOptions = workspaceDomain ? { workspaceDomain } : {};
   const wordSplit = (generateGmailDotVariants(address, { ...generatorOptions, mode: 'wordSplit' })[0] || noDot).toLowerCase();
-
-  const userTags = normalizePlusTags(options.plusTags);
-  const plusTagsUsed = userTags.length ? userTags : [...DEFAULT_PLUS_TAGS];
 
   // +alias variants on the dot-stripped base local AND on the word-split
   // local (e.g. john.smith+signup@gmail.com) so users see both shapes.

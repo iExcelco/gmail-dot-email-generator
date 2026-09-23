@@ -8,6 +8,7 @@ import { parseGmailAddress, buildVariantSet, classifyAddress } from './gmailDots
 import { sendResultsEmail } from './email-service.js';
 import { captureLeadAndRun, recordResultsEmail } from './lib/lead-capture-service.js';
 import { isDbEnabled } from './lib/db.js';
+import { renderPage, robotsTxt, sitemapXml, llmsTxt } from './lib/seo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +51,15 @@ app.use(express.json({ limit: '2mb' }));
 app.get(/^\/gmail-dot-variations-generator(\/.*)?$/, (req, res) => {
   res.redirect(301, req.url.replace('/gmail-dot-variations-generator', '/gmail-dot-trick'));
 });
+
+// Crawler files live at the domain root whatever the base path.
+app.get('/robots.txt', (_req, res) => res.type('text/plain').send(robotsTxt()));
+app.get('/sitemap.xml', (_req, res) => res.type('application/xml').send(sitemapXml()));
+app.get('/llms.txt', (_req, res) => res.type('text/plain; charset=utf-8').send(llmsTxt()));
+
+// The page with its FAQ, how-to and JSON-LD filled in from lib/seo.js (rendered once).
+const PAGE_HTML = renderPage(fs.readFileSync(path.join(__dirname, 'service-page.html'), 'utf8'));
+const sendPage = (_req, res) => res.type('html').send(PAGE_HTML);
 
 const staticDir = __dirname;
 for (const bp of BASE_PATHS) {
@@ -251,11 +261,11 @@ if (!BASE_PATHS.includes('/')) {
 
 for (const bp of BASE_PATHS) {
   app.get(bp, (_req, res) => {
-    res.sendFile(path.join(staticDir, 'service-page.html'));
+    sendPage(_req, res);
   });
   if (bp !== '/' && !bp.endsWith('/')) {
     app.get(bp + '/', (_req, res) => {
-      res.sendFile(path.join(staticDir, 'service-page.html'));
+      sendPage(_req, res);
     });
   }
 }
