@@ -127,3 +127,28 @@ test('buildVariantSet: Workspace addresses keep their dots and only get +tag ver
   assert.ok(ws.extras.every((v) => v.startsWith('micah.berkley+')), 'never the dot-stripped mailbox');
   assert.equal(ws.modeWarning, '');
 });
+
+test('ranking: the first dot suggestions are the readable ones', () => {
+  const set = buildVariantSet('johnsmith@gmail.com', { mode: 'all' });
+  const plus = new Set(set.plusVariants);
+  const dots = [set.primary, ...set.extras.filter((v) => !plus.has(v))].map((v) => v.split('@')[0]);
+  assert.equal(dots[0], 'john.smith', 'word split is the best pick');
+  assert.ok(dots.slice(1, 5).every((v) => v.startsWith('john.') || v.endsWith('.smith')), 'next ones keep the name readable');
+  assert.equal(dots.length, 255, 'still every placement except the address as typed');
+  assert.ok(dots.indexOf('j.o.h.n.s.m.i.t.h') > 200, 'the least readable comes last');
+  assert.ok(set.plusVariants[0].startsWith('john.smith+'), 'readable +tag form first');
+});
+
+test('no recognisable name: best pick is a middle split, never the address as typed', () => {
+  const set = buildVariantSet('xkqzvwpt@gmail.com', { mode: 'all' });
+  assert.equal(set.primary, 'xkqz.vwpt@gmail.com');
+  assert.ok(!set.extras.includes('xkqzvwpt@gmail.com'));
+});
+
+test('readabilityScore prefers the word boundary, fewer dots and no 1-letter pieces', async () => {
+  const { readabilityScore } = await import('../gmailDots.js');
+  const s = (v) => readabilityScore(`${v}@gmail.com`, 4);
+  assert.ok(s('john.smith') > s('john.smi.th'));
+  assert.ok(s('john.smi.th') > s('joh.nsmith'));
+  assert.ok(s('joh.nsmith') > s('j.ohnsmith'));
+});

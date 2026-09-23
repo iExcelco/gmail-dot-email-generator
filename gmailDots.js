@@ -321,6 +321,43 @@ function dedupe(values) {
 }
 
 /**
+ * How readable a dotted address looks, higher is better. Keeps the dot between
+ * words (john.smith), prefers fewer dots, and penalises 1- and 2-letter pieces
+ * (j.ohnsmith, jo.hnsmith), so the first suggestions look like real addresses.
+ *
+ * @param {string} address - a dot variant (plus tag, if any, is ignored)
+ * @param {number|null} boundary - word-split index into the dot-free username
+ */
+export function readabilityScore(address, boundary) {
+  const local = address.split('@')[0].split('+')[0];
+  const segments = local.split('.');
+  const dots = segments.length - 1;
+  const lengths = segments.map((seg) => seg.length);
+  let atBoundary = false;
+  let chars = 0;
+  for (const len of lengths.slice(0, -1)) {
+    chars += len;
+    if (chars === boundary) atBoundary = true;
+  }
+  const ones = lengths.filter((n) => n === 1).length;
+  const twos = lengths.filter((n) => n === 2).length;
+  return (atBoundary ? 100 : 0)
+    - dots * 10
+    - ones * 15
+    - twos * 4
+    + (Math.min(...lengths) >= 3 ? 5 : 0)
+    - (Math.max(...lengths) - Math.min(...lengths)) * 0.5;
+}
+
+// Most readable first; ties keep their original order (Array#sort is stable).
+function rankByReadability(addresses, boundary) {
+  return addresses
+    .map((address) => ({ address, score: readabilityScore(address, boundary) }))
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.address);
+}
+
+/**
  * Everything one run of the tool produces for an address: the recommended
  * word-split variant (`primary`) plus `extras` (all-mode dot variants and
  * +alias variants). The page renders this and the server persists it, so
@@ -367,7 +404,13 @@ export function buildVariantSet(address, options = {}) {
 
   const noDot = `${parsed.baseLocal}${parsed.plusTag}@${parsed.domain}`.toLowerCase();
   const generatorOptions = workspaceDomain ? { workspaceDomain } : {};
-  const wordSplit = (generateGmailDotVariants(address, { ...generatorOptions, mode: 'wordSplit' })[0] || noDot).toLowerCase();
+  const namedSplit = (generateGmailDotVariants(address, { ...generatorOptions, mode: 'wordSplit' })[0] || noDot).toLowerCase();
+  // No recognisable word split (e.g. xkqzvwpt): split in the middle so the best
+  // pick is always a real variation, never the address exactly as typed.
+  const mid = Math.ceil(parsed.baseLocal.length / 2);
+  const wordSplit = namedSplit !== noDot || parsed.baseLocal.length < 2
+    ? namedSplit
+    : `${parsed.baseLocal.slice(0, mid)}.${parsed.baseLocal.slice(mid)}${parsed.plusTag}@${parsed.domain}`.toLowerCase();
 
   // +alias variants on the dot-stripped base local AND on the word-split
   // local (e.g. john.smith+signup@gmail.com) so users see both shapes.
@@ -383,9 +426,12 @@ export function buildVariantSet(address, options = {}) {
   if (mode === 'all') {
     try {
       const all = generateGmailDotVariants(address, { ...generatorOptions, mode: 'all' });
-      extras = dedupe(all)
-        .map((variant) => variant.toLowerCase())
-        .filter((variant) => variant !== noDot && variant !== wordSplit);
+      extras = rankByReadability(
+        dedupe(all)
+          .map((variant) => variant.toLowerCase())
+          .filter((variant) => variant !== noDot && variant !== wordSplit),
+        chooseWordSplitIndex(parsed.casedLocal)
+      );
     } catch (error) {
       modeWarning = error instanceof RangeError
         ? 'All mode exceeds safe permutation limits for this local-part length. Showing word split only.'
@@ -394,8 +440,9 @@ export function buildVariantSet(address, options = {}) {
   }
 
   // +alias variants are unique by construction (different "+tag" segment);
-  // dedupe against primary/noDot defensively.
-  const plusVariants = dedupe([...plusBase, ...plusSplit])
+  // dedupe against primary/noDot defensively. The readable word-split form
+  // (john.smith+signup) comes before the plain one (johnsmith+signup).
+  const plusVariants = dedupe([...plusSplit, ...plusBase])
     .filter((v) => v !== noDot && v !== wordSplit);
   extras = dedupe([...extras, ...plusVariants]);
 

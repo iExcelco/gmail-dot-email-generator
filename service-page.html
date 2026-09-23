@@ -78,6 +78,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; } /* .gt-seg etc. set display, which would beat the hidden attribute */
     html, body { margin: 0; padding: 0; color: var(--ink); background: #fff; }
     a { color: inherit; text-decoration: none; }
     button, input { font: inherit; }
@@ -136,11 +137,15 @@
       font: 600 12px/1 "Poppins", sans-serif; font-variant-numeric: tabular-nums; margin-left: 6px;
       background: var(--soft); border: 1px solid var(--line); padding: 3px 7px; border-radius: 999px;
     }
-    .gt-tools { display: flex; gap: 8px; }
+    .gt-tools { display: flex; gap: 8px; margin-left: auto; }
+    .gt-seg { display: inline-flex; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+    .gt-seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+    .gt-seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+    .gt-seg b { font: 600 12px/1 "Poppins", sans-serif; color: var(--teal-700); margin-left: 5px; font-variant-numeric: tabular-nums; }
     .gt-example { margin: 0; font-size: 13px; color: var(--muted); }
     .gt-example b { color: var(--ink); font-weight: 600; }
 
-    .gt-table { position: relative; height: 528px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+    .gt-table { position: relative; max-height: 528px; min-height: 88px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
     .gt-spacer { width: 1px; }
     .gt-window { position: absolute; top: 0; left: 0; right: 0; }
     .gt-row {
@@ -204,7 +209,7 @@
       .gt-grid { grid-template-columns: 1fr; }
       .gt-side { border-right: 0; border-bottom: 1px solid var(--line); padding: 22px 18px; }
       .gt-res { padding: 16px 14px 18px; }
-      .gt-table { height: 60vh; min-height: 320px; }
+      .gt-table { max-height: 60vh; }
       .gt-lede { font-size: 16px; }
       .gt-prose h2 { font-size: 22px; }
       .container { padding: 0 16px; }
@@ -374,6 +379,10 @@
                 <button type="button" role="tab" id="tabDots" data-tab="dots" aria-selected="true" aria-controls="table">Dots<b id="countDots">0</b></button>
                 <button type="button" role="tab" id="tabPlus" data-tab="plus" aria-selected="false" aria-controls="table">+Tags<b id="countPlus">0</b></button>
               </div>
+              <div class="gt-seg" id="viewToggle" role="group" aria-label="How many dot variations">
+                <button type="button" data-view="rec" aria-pressed="true">Recommended</button>
+                <button type="button" data-view="all" aria-pressed="false">All<b id="countAll">0</b></button>
+              </div>
               <div class="gt-tools">
                 <button id="copyAllBtn" class="gt-btn gt-btn-sm" type="button">Copy all</button>
                 <button id="csvBtn" class="gt-btn gt-btn-sm gt-btn-ghost" type="button">Download CSV</button>
@@ -531,6 +540,7 @@
     const EXAMPLE = 'johnsmith@gmail.com';
     const ROW_H = 44; // matches --row-h
     const LOG_DELAY_MS = 1500; // a typed address is captured once the visitor pauses
+    const RECOMMENDED = 10; // dot suggestions shown in Recommended view (already ranked most readable first)
     // Paste anything that contains an address ("John Smith <john@gmail.com>", "mailto:...")
     // and keep only the address.
     const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
@@ -547,6 +557,9 @@
     const countDots = $('countDots');
     const countPlus = $('countPlus');
     const copyAllBtn = $('copyAllBtn');
+    const viewToggle = $('viewToggle');
+    const viewButtons = [...viewToggle.querySelectorAll('[data-view]')];
+    const countAll = $('countAll');
     const csvBtn = $('csvBtn');
     const exampleNote = $('exampleNote');
     const modeWarning = $('modeWarning');
@@ -559,6 +572,7 @@
       email: '',     // what the visitor entered ('' = showing the example)
       result: null,  // compute() output for the address being shown
       tab: 'dots',
+      view: 'rec',   // 'rec' = top RECOMMENDED dot variations, 'all' = every one
       logged: null,  // { key, promise } for the /api/log call of the current address
       logTimer: 0
     };
@@ -608,6 +622,7 @@
         ? 'This address is too long to list every dot placement, so only the best pick is shown under Dots.'
         : '';
       copyAllBtn.disabled = !res;
+      syncControls();
       csvBtn.disabled = !res;
       emailMeBtn.disabled = !isReal();
       paintTable();
@@ -615,7 +630,18 @@
 
     function rows() {
       if (!state.result) return [];
-      return state.tab === 'dots' ? state.result.dots : state.result.plus;
+      if (state.tab === 'plus') return state.result.plus;
+      return state.view === 'rec' ? state.result.dots.slice(0, RECOMMENDED) : state.result.dots;
+    }
+
+    // The toggle only means something for Gmail dot variations.
+    function syncControls() {
+      const res = state.result;
+      viewToggle.hidden = state.tab !== 'dots' || !res || !!res.ws || res.dots.length <= RECOMMENDED;
+      viewButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+      countAll.textContent = res ? res.dots.length.toLocaleString() : '0';
+      const n = rows().length;
+      copyAllBtn.textContent = n ? `Copy all ${n.toLocaleString()}` : 'Copy all';
     }
 
     // Only the rows in view are in the DOM, so tens of thousands of addresses scroll smoothly.
@@ -737,11 +763,19 @@
     });
     plusTagsInput.addEventListener('input', () => render());
 
+    viewButtons.forEach((b) => b.addEventListener('click', () => {
+      state.view = b.dataset.view;
+      table.scrollTop = 0;
+      syncControls();
+      paintTable();
+    }));
+
     function selectTab(name) {
       state.tab = name;
       tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
       table.setAttribute('aria-labelledby', name === 'dots' ? 'tabDots' : 'tabPlus');
       table.scrollTop = 0;
+      syncControls();
       paintTable();
     }
     tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.tab)));
