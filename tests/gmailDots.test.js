@@ -117,3 +117,13 @@ test('classifyAddress: gmail, workspace, typo, non-Google and incomplete address
   assert.equal(classifyAddress('john@').kind, 'invalid');
   assert.equal(classifyAddress('john@localhost').kind, 'invalid');
 });
+
+test('buildVariantSet: Workspace addresses keep their dots and only get +tag versions', () => {
+  // Dots change a Google Workspace address, so no dot variants may be offered.
+  const ws = buildVariantSet('Micah.Berkley@iexcel.co', { mode: 'all', workspaceDomain: 'iexcel.co', plusTags: 'signup, promo' });
+  assert.equal(ws.primary, 'micah.berkley@iexcel.co', 'address kept exactly, dots included');
+  assert.deepEqual(ws.extras, ['micah.berkley+signup@iexcel.co', 'micah.berkley+promo@iexcel.co']);
+  assert.deepEqual(ws.plusVariants, ws.extras);
+  assert.ok(ws.extras.every((v) => v.startsWith('micah.berkley+')), 'never the dot-stripped mailbox');
+  assert.equal(ws.modeWarning, '');
+});

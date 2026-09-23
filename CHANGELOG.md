@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-09-23
+### Added
+- **Intro above the tool**: H1 "Gmail Dot Trick Generator", a direct-answer lede with real examples, and quick facts.
+- **SEO / AEO / GEO**: visible article below the tool with question-style H2s (what it is, how many variations with the 2^(n-1) formula and table, how to use it, dots vs. +tags table, use cases, FAQ) and an "Updated" date. One `@graph` JSON-LD block: Organization, WebSite, WebPage, WebApplication, HowTo, FAQPage. New title, description, robots meta, OG/Twitter tags, canonical `https://gmaildottrick.co/`. New `/robots.txt` (search and AI crawlers welcome, `/api/` blocked), `/sitemap.xml` and `/llms.txt`. The FAQ, its JSON-LD and llms.txt all come from `lib/seo.js`, so they can't drift apart.
+
+### Fixed
+- **Google Workspace addresses got wrong variations.** Google: "If you use Gmail through work, school, or other organization (like yourdomain.com or yourschool.edu), dots do change your address." (support.google.com/mail/answer/7436150). Workspace addresses now keep their dots exactly as typed and only get +tag versions (previously dot variants, and +tags built on the dot-stripped name, which reach a different mailbox). The page opens the +Tags tab for them and says why.
+
 ## [1.6.0] - 2026-09-23
 ### Changed
 - **New page: Results Table.** One address field and a live table, with no Generate button, mode radios, or Workspace checkbox. Dots and +Tags tabs with counts; click any row to copy it; Copy all (one per line); Download CSV; the list scrolls through every variation (only the visible rows are in the DOM, so 65k rows stay smooth). Paste cleanup keeps just the address from input like "John <john@gmail.com>"; Enter copies the best pick. Why / How it works / FAQ are collapsed below the tool. The page went from 1,827 to 795 lines.
