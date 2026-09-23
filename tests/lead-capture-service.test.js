@@ -150,3 +150,16 @@ test('recordResultsEmail: a failed send is recorded; a lead id that is not the r
   assert.ok(!calls.some((c) => c.at === 'sheet.update'));
   done();
 });
+
+test('recordResultsEmail: "Email me the list" grants consent on the lead, public.leads and the sheet', async () => {
+  const leadRow = { lead_id: 'IXL-GDG-1', run_id: 'run1', sheet_row_number: 47 };
+  const { calls, sheetService, done } = harness({ leadRow });
+  await recordResultsEmail({ leadId: 'IXL-GDG-1', email: 'JohnSmith@gmail.com', ok: false, error: 'boom', consent: true }, { sheetService });
+  const upd = calls.find((c) => c.text?.startsWith('update gdg.leads set consent = true'));
+  assert.ok(upd, 'gdg.leads consent set');
+  assert.equal(upd.params[0], 'IXL-GDG-1');
+  assert.ok(calls.some((c) => c.text?.startsWith('update public.leads set consent_granted_at')));
+  assert.ok(!calls.some((c) => c.text?.startsWith('update public.leads set report_email_sent_at')), 'send failed: not marked emailed');
+  assert.deepEqual(calls.find((c) => c.at === 'sheet.update').fields, { resultsEmailed: 'failed', consent: 'yes' });
+  done();
+});

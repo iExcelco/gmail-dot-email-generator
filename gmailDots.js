@@ -1,4 +1,14 @@
+import { GMAIL_TYPO_MAP } from './lib/emailValidator.js';
+
 const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
+// Big consumer inboxes that are definitely not Google. Dot/+alias tricks don't
+// apply there, so these are rejected instead of being treated as Workspace.
+const NOT_GOOGLE_DOMAINS = new Set([
+  'yahoo.com', 'ymail.com', 'rocketmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'pm.me',
+  'gmx.com', 'gmx.net', 'zoho.com', 'yandex.com', 'yandex.ru', 'mail.com', 'comcast.net',
+  'att.net', 'verizon.net', 'sbcglobal.net', 'qq.com', '163.com', 'fastmail.com', 'hey.com'
+]);
 const DEFAULT_MAX_VARIANTS = 65536;
 const DEFAULT_MODE = 'wordSplit';
 const MIN_WORD_SPLIT_SCORE = 15;
@@ -375,4 +385,27 @@ export function buildVariantSet(address, options = {}) {
     isWorkspace: !!workspaceDomain,
     modeWarning
   };
+}
+
+/**
+ * What kind of address this is, so the page can pick the right path without a
+ * "Using Google Workspace?" checkbox:
+ *   gmail      - gmail.com / googlemail.com
+ *   workspace  - any other valid domain (assumed to be Google Workspace)
+ *   typo       - a Gmail typo like gmail.con; `suggestion` holds the fix
+ *   not-google - a known non-Google inbox (yahoo.com, outlook.com, ...)
+ *   invalid    - not an address yet
+ */
+export function classifyAddress(value) {
+  const trimmed = String(value || '').trim();
+  const at = trimmed.lastIndexOf('@');
+  if (at <= 0 || at === trimmed.length - 1) return { kind: 'invalid', domain: '' };
+  const domain = trimmed.slice(at + 1).toLowerCase();
+  if (GMAIL_DOMAINS.has(domain)) return { kind: 'gmail', domain };
+  if (GMAIL_TYPO_MAP[domain]) {
+    return { kind: 'typo', domain, suggestion: `${trimmed.slice(0, at)}@${GMAIL_TYPO_MAP[domain]}` };
+  }
+  if (NOT_GOOGLE_DOMAINS.has(domain)) return { kind: 'not-google', domain };
+  if (!isValidWorkspaceDomain(domain)) return { kind: 'invalid', domain };
+  return { kind: 'workspace', domain };
 }

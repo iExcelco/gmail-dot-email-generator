@@ -81,3 +81,9 @@ test('all-leads sync: row matches the shared tab columns and appends to [data] a
   assert.equal(append.req.range, "'[data] all-leads'!A:R");
   assert.equal(append.req.insertDataOption, 'INSERT_ROWS');
 });
+
+test('updateFields can flip the existing Consent column (P) without touching the rest', async () => {
+  const { s, calls } = service([...ORIGINAL_16, 'Lead Status', 'Run ID', 'Dot Variant Count', 'Results Emailed']);
+  await s.updateFields(47, { consent: 'yes' });
+  assert.deepEqual(calls.find((c) => c.op === 'batchUpdate').req.requestBody.data, [{ range: 'gmail-email-generator!P47', values: [['yes']] }]);
+});

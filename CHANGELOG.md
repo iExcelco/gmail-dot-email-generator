@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-09-23
+### Changed
+- **New page: Results Table.** One address field and a live table, with no Generate button, mode radios, or Workspace checkbox. Dots and +Tags tabs with counts; click any row to copy it; Copy all (one per line); Download CSV; the list scrolls through every variation (only the visible rows are in the DOM, so 65k rows stay smooth). Paste cleanup keeps just the address from input like "John <john@gmail.com>"; Enter copies the best pick. Why / How it works / FAQ are collapsed below the tool. The page went from 1,827 to 795 lines.
+- **Workspace is detected from the domain.** `classifyAddress()` in gmailDots.js: Gmail typos (gmail.con) get a "Did you mean" fix, known non-Google inboxes (yahoo.com, outlook.com, ...) get a clear message, and any other valid domain is treated as Google Workspace. The server applies the same check.
+- **Consent is the "Email me the list" button** (the checkbox is gone). The server records it on the lead (gdg.leads, public.leads, and the sheet's Consent column) and refuses `/api/send-results` when `consent` is false.
+- A typed address is captured once the visitor pauses (1.5 s), pastes, or copies, and only once per address.
+
 ## [1.5.0] - 2026-09-22
 ### Added
 - **Lead sync:** every lead is also appended to the cross-tool `[data] all-leads` tab of the IRP Lead Intelligence sheet (`Tool = IXL-GDG`), next to LeadGen, AI Search Grader and Landing Page Analyzer. `scripts/backfill-all-leads.js` backfilled the 49 existing leads (skips Lead IDs already there) and made the `[pivot] all-leads` source open-ended (it was fixed to rows 1-38).
