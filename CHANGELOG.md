@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-09-23
+### Added
+- **Recommended / All toggle** on the Dots tab (like Direction 1). Recommended (default) shows the 10 most readable dot variations with the best pick first; All lists every one in the same order. "Copy all N" copies what's shown. Hidden on the +Tags tab and for Workspace addresses.
+
+### Changed
+- **Dot variations are ranked by readability** (`readabilityScore()` in gmailDots.js) instead of raw permutation order: keep the dot between words, fewer dots, no 1- or 2-letter pieces. johnsmith now starts `john.smith, john.sm.ith, john.smi.th, jo.hn.smith…` instead of `j.ohnsmith, jo.hnsmith, j.o.hnsmith…`. The page, the emailed list and the DB all use this order.
+- +tag versions list the readable form first (`john.smith+signup` before `johnsmith+signup`).
+- Usernames with no recognisable name get a middle split as the best pick (`xkqz.vwpt`) instead of the address exactly as typed.
+- The results table sizes to its rows (up to the previous height).
+
 ## [1.7.0] - 2026-09-23
 ### Added
 - **Intro above the tool**: H1 "Gmail Dot Trick Generator", a direct-answer lede with real examples, and quick facts.
