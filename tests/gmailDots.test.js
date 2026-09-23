@@ -106,3 +106,14 @@ test('buildVariantSet: all mode past the permutation limit falls back with a war
   assert.match(set.modeWarning, /exceeds safe permutation limits/);
   assert.deepEqual(set.extras, set.plusVariants);
 });
+
+test('classifyAddress: gmail, workspace, typo, non-Google and incomplete addresses', async () => {
+  const { classifyAddress } = await import('../gmailDots.js');
+  assert.equal(classifyAddress('john@gmail.com').kind, 'gmail');
+  assert.equal(classifyAddress('John@GoogleMail.com').kind, 'gmail');
+  assert.deepEqual(classifyAddress('micah@iexcel.co'), { kind: 'workspace', domain: 'iexcel.co' });
+  assert.deepEqual(classifyAddress('john@gmail.con'), { kind: 'typo', domain: 'gmail.con', suggestion: 'john@gmail.com' });
+  assert.deepEqual(classifyAddress('john@yahoo.com'), { kind: 'not-google', domain: 'yahoo.com' });
+  assert.equal(classifyAddress('john@').kind, 'invalid');
+  assert.equal(classifyAddress('john@localhost').kind, 'invalid');
+});

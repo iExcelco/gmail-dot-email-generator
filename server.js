@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SheetService, generateLeadId } from './lib/sheetService.js';
 import { validateEmail } from './lib/emailValidator.js';
-import { parseGmailAddress, buildVariantSet } from './gmailDots.js';
+import { parseGmailAddress, buildVariantSet, classifyAddress } from './gmailDots.js';
 import { sendResultsEmail } from './email-service.js';
 import { captureLeadAndRun, recordResultsEmail } from './lib/lead-capture-service.js';
 import { isDbEnabled } from './lib/db.js';
@@ -67,6 +67,15 @@ if (!sheetService) {
   console.warn('[sheets] GOOGLE_SHEETS_SPREADSHEET_ID not set — /api/log will accept but not persist.');
 }
 
+// Workspace mode skips the Gmail-only validator, so reject what is clearly not a
+// Google inbox (yahoo.com, ...) or is a Gmail typo (gmail.con) here instead.
+function workspaceBlockReason(email) {
+  const kind = classifyAddress(email);
+  if (kind.kind === 'typo') return `Did you mean ${kind.suggestion}?`;
+  if (kind.kind === 'not-google') return `Dot variations only work for Gmail and Google Workspace. ${kind.domain} isn't a Google inbox.`;
+  return '';
+}
+
 async function logRoute(req, res) {
   const {
     email,
@@ -96,6 +105,9 @@ async function logRoute(req, res) {
     if (!validation.valid) {
       return res.status(400).json({ ok: false, error: validation.reason });
     }
+  } else {
+    const blocked = workspaceBlockReason(email);
+    if (blocked) return res.status(400).json({ ok: false, error: blocked });
   }
 
   const parsed = parseGmailAddress(email, useWorkspace ? { workspaceDomain: wsDomain } : undefined);
@@ -143,10 +155,15 @@ if (!BASE_PATHS.includes('/')) {
 }
 
 async function sendResultsRoute(req, res) {
-  const { email, baseEmail, mode, workspaceDomain, isWorkspace, plusTagsUsed, leadId } = req.body || {};
+  const { email, baseEmail, mode, workspaceDomain, isWorkspace, plusTagsUsed, leadId, consent } = req.body || {};
 
   if (typeof email !== 'string' || !email) {
     return res.status(400).json({ ok: false, error: 'email required' });
+  }
+  // The results email is marketing-consented. Older cached pages only called this
+  // endpoint after their consent box was ticked and don't send the field.
+  if (consent === false) {
+    return res.status(400).json({ ok: false, error: 'consent required' });
   }
 
   // Workspace-mode bypass — mirrors the pattern in /api/log so users on
@@ -161,6 +178,8 @@ async function sendResultsRoute(req, res) {
       return res.status(400).json({ ok: false, error: validation.reason });
     }
   } else {
+    const blocked = workspaceBlockReason(email);
+    if (blocked) return res.status(400).json({ ok: false, error: blocked });
     // Light structural sanity check for workspace-mode addresses since we
     // skipped the strict Gmail-only validator above.
     const parsed = parseGmailAddress(email, { workspaceDomain: wsDomain });
@@ -215,7 +234,8 @@ async function sendResultsRoute(req, res) {
     leadId: typeof leadId === 'string' ? leadId : '',
     email,
     ok: !sendError,
-    error: sendError ? sendError.message || String(sendError) : null
+    error: sendError ? sendError.message || String(sendError) : null,
+    consent: true
   }, { sheetService });
 
   res.json({ ok: true, emailQueued: !sendError });
